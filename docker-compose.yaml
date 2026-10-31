@@ -1,0 +1,92 @@
+x-agent: &agent
+  profiles: [agents]
+  working_dir: /workspace
+  stdin_open: true
+  tty: true
+  command: sleep infinity
+  security_opt: [no-new-privileges:true]
+  cap_drop: [ALL]
+  environment:
+    AI_MEMORY_URL: http://ai-memory:49374/mcp
+    AI_MEMORY_AUTH_TOKEN: ${AI_MEMORY_AUTH_TOKEN:?Defina AI_MEMORY_AUTH_TOKEN no arquivo .env}
+  volumes:
+    - ./src:/workspace
+  depends_on: [ai-memory]
+  networks: [agent_net]
+
+services:
+  ai-sandbox:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.sandbox
+    command: sleep infinity
+    working_dir: /workspace
+    volumes:
+      - ./src:/workspace
+    networks: [sandbox_net]
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+
+  ai-memory:
+    image: ${AI_MEMORY_IMAGE:-akitaonrails/ai-memory:latest}
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:49374:49374"
+    environment:
+      AI_MEMORY_AUTH_TOKEN: ${AI_MEMORY_AUTH_TOKEN:?Defina AI_MEMORY_AUTH_TOKEN no arquivo .env}
+      AI_MEMORY_LLM_PROVIDER: openai-compat
+      AI_MEMORY_LLM_BASE_URL: https://openrouter.ai/api/v1
+      AI_MEMORY_LLM_MODEL: ${AI_MEMORY_LLM_MODEL:-moonshotai/kimi-k2.6}
+      LLM_API_KEY: ${OPENROUTER_API_KEY:?Defina OPENROUTER_API_KEY no arquivo .env}
+      AI_MEMORY_ALLOWED_HOSTS: localhost,127.0.0.1,ai-memory
+    volumes:
+      - ./memory_data:/data
+    networks: [agent_net]
+
+  codex:
+    <<: *agent
+    # O sandbox do Codex precisa criar namespaces de usuário dentro do Docker.
+    security_opt:
+      - no-new-privileges:true
+      - seccomp=unconfined
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.codex
+    volumes:
+      - ./src:/workspace
+      - codex_home:/home/node
+  claude:
+    <<: *agent
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.claude
+    volumes:
+      - ./src:/workspace
+      - claude_home:/home/node
+  antigravity:
+    <<: *agent
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.antigravity
+    volumes:
+      - ./src:/workspace
+      - antigravity_home:/home/node
+  opencode:
+    <<: *agent
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.opencode
+    volumes:
+      - ./src:/workspace
+      - opencode_home:/home/node
+
+networks:
+  sandbox_net:
+    driver: bridge
+  agent_net:
+    driver: bridge
+volumes:
+  codex_home:
+  claude_home:
+  antigravity_home:
+  opencode_home:
